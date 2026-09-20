@@ -265,6 +265,46 @@ td.actions {
   font-size: 11px;
 }
 
+.chip {
+  display: inline-block;
+  margin: 0 4px 2px 0;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #f4f6f9;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--ink-soft);
+}
+
+.allow-cell {
+  max-width: 220px;
+}
+
+.field-tip {
+  display: block;
+  margin: 2px 0 4px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: normal;
+}
+
+.ignored-panel {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+
+.ignored-panel h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .lv-error {
   background: #fdeeee;
   color: var(--danger);

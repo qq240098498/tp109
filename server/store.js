@@ -14,24 +14,26 @@ const MAX_PATTERN_LENGTH = 60;
 const MAX_NOTE_LENGTH = 200;
 const MAX_PATH_LENGTH = 120;
 const MAX_CONTENT_LENGTH = 4000;
+const MAX_ALLOWLIST_SIZE = 20;
 
 // 检查规则的初始数据。十二条规则里有两条是停用的，
-// 有一条启用的规则在现有文件里一条命中都没有，用来观察从未命中的规则
+// 有一条启用的规则在现有文件里一条命中都没有，用来观察从未命中的规则；
+// CODE-003 登记了一条允许清单，用来观察比对时被排除的忽略项
 function seedRules() {
   const at = '2026-09-02T02:00:00.000Z';
   return [
-    { id: 'rule-1001', code: 'CODE-001', name: '禁止提交调试输出', level: '警告', status: '启用', fileType: 'js', pattern: 'console.log', note: '上线前要换成统一日志', createdAt: at, updatedAt: at },
-    { id: 'rule-1002', code: 'CODE-002', name: '变量声明统一用 let 或 const', level: '错误', status: '启用', fileType: 'js', pattern: 'var ', note: '老代码里还有不少', createdAt: at, updatedAt: at },
-    { id: 'rule-1003', code: 'CODE-003', name: '待办事项需要收口', level: '提示', status: '启用', fileType: '全部', pattern: 'TODO', note: '带人名与期限的可以留', createdAt: at, updatedAt: at },
-    { id: 'rule-1004', code: 'CODE-004', name: '禁止动态执行代码', level: '错误', status: '启用', fileType: '全部', pattern: 'eval(', note: '', createdAt: at, updatedAt: at },
-    { id: 'rule-1005', code: 'CODE-005', name: '禁止把口令写进代码', level: '错误', status: '启用', fileType: '全部', pattern: 'password =', note: '口令一律走统一配置', createdAt: at, updatedAt: at },
-    { id: 'rule-1006', code: 'CODE-006', name: '空捕获块要写清原因', level: '警告', status: '启用', fileType: 'js', pattern: 'catch (e) {}', note: '', createdAt: at, updatedAt: at },
-    { id: 'rule-1007', code: 'CODE-007', name: '调试开关上线前要关掉', level: '警告', status: '停用', fileType: 'js', pattern: 'DEBUG = true', note: '等联调结束再打开', createdAt: at, updatedAt: at },
-    { id: 'rule-1008', code: 'CODE-008', name: '数据库地址不许写死在代码里', level: '错误', status: '启用', fileType: '全部', pattern: 'postgres://', note: '', createdAt: at, updatedAt: at },
-    { id: 'rule-1009', code: 'CODE-009', name: '取配置项要走统一封装', level: '提示', status: '启用', fileType: 'js', pattern: 'process.env[', note: '直接按名字取容易拼错', createdAt: at, updatedAt: at },
-    { id: 'rule-1010', code: 'CODE-010', name: '遗留注释要清理', level: '提示', status: '停用', fileType: '全部', pattern: 'FIXME', note: '', createdAt: at, updatedAt: at },
-    { id: 'rule-1011', code: 'CODE-011', name: '脚本里禁止直接用强制删除', level: '警告', status: '启用', fileType: 'sh', pattern: 'rm -rf', note: '脚本里改用受控的清理命令', createdAt: at, updatedAt: at },
-    { id: 'rule-1012', code: 'CODE-012', name: '文档里的临时占位要删掉', level: '提示', status: '启用', fileType: 'md', pattern: '待补', note: '', createdAt: at, updatedAt: at },
+    { id: 'rule-1001', code: 'CODE-001', name: '禁止提交调试输出', level: '警告', status: '启用', fileType: 'js', pattern: 'console.log', allowlist: [], note: '上线前要换成统一日志', createdAt: at, updatedAt: at },
+    { id: 'rule-1002', code: 'CODE-002', name: '变量声明统一用 let 或 const', level: '错误', status: '启用', fileType: 'js', pattern: 'var ', allowlist: [], note: '老代码里还有不少', createdAt: at, updatedAt: at },
+    { id: 'rule-1003', code: 'CODE-003', name: '待办事项需要收口', level: '提示', status: '启用', fileType: '全部', pattern: 'TODO', allowlist: ['<!-- TODO'], note: '带人名与期限的可以留', createdAt: at, updatedAt: at },
+    { id: 'rule-1004', code: 'CODE-004', name: '禁止动态执行代码', level: '错误', status: '启用', fileType: '全部', pattern: 'eval(', allowlist: [], note: '', createdAt: at, updatedAt: at },
+    { id: 'rule-1005', code: 'CODE-005', name: '禁止把口令写进代码', level: '错误', status: '启用', fileType: '全部', pattern: 'password =', allowlist: [], note: '口令一律走统一配置', createdAt: at, updatedAt: at },
+    { id: 'rule-1006', code: 'CODE-006', name: '空捕获块要写清原因', level: '警告', status: '启用', fileType: 'js', pattern: 'catch (e) {}', allowlist: [], note: '', createdAt: at, updatedAt: at },
+    { id: 'rule-1007', code: 'CODE-007', name: '调试开关上线前要关掉', level: '警告', status: '停用', fileType: 'js', pattern: 'DEBUG = true', allowlist: [], note: '等联调结束再打开', createdAt: at, updatedAt: at },
+    { id: 'rule-1008', code: 'CODE-008', name: '数据库地址不许写死在代码里', level: '错误', status: '启用', fileType: '全部', pattern: 'postgres://', allowlist: [], note: '', createdAt: at, updatedAt: at },
+    { id: 'rule-1009', code: 'CODE-009', name: '取配置项要走统一封装', level: '提示', status: '启用', fileType: 'js', pattern: 'process.env[', allowlist: [], note: '直接按名字取容易拼错', createdAt: at, updatedAt: at },
+    { id: 'rule-1010', code: 'CODE-010', name: '遗留注释要清理', level: '提示', status: '停用', fileType: '全部', pattern: 'FIXME', allowlist: [], note: '', createdAt: at, updatedAt: at },
+    { id: 'rule-1011', code: 'CODE-011', name: '脚本里禁止直接用强制删除', level: '警告', status: '启用', fileType: 'sh', pattern: 'rm -rf', allowlist: [], note: '脚本里改用受控的清理命令', createdAt: at, updatedAt: at },
+    { id: 'rule-1012', code: 'CODE-012', name: '文档里的临时占位要删掉', level: '提示', status: '启用', fileType: 'md', pattern: '待补', allowlist: [], note: '', createdAt: at, updatedAt: at },
   ];
 }
 
@@ -302,6 +304,10 @@ function normalizeRule(item, fallbackIndex) {
   const level = LEVELS.includes(source.level) ? source.level : LEVELS[0];
   const status = STATUSES.includes(source.status) ? source.status : STATUSES[0];
   const fileType = FILE_TYPES.includes(source.fileType) ? source.fileType : FILE_TYPES[0];
+  // 允许清单只收文本条目，条目内容原样保留，空不空、重不重交给保存时的校验把关
+  const allowlist = Array.isArray(source.allowlist)
+    ? source.allowlist.filter((entry) => typeof entry === 'string')
+    : [];
   return {
     id: typeof source.id === 'string' && source.id ? source.id : `rule-restored-${fallbackIndex + 1}`,
     code: typeof source.code === 'string' ? source.code.trim() : '',
@@ -310,6 +316,7 @@ function normalizeRule(item, fallbackIndex) {
     status,
     fileType,
     pattern: typeof source.pattern === 'string' ? source.pattern : '',
+    allowlist,
     note: typeof source.note === 'string' ? source.note : '',
     createdAt,
     updatedAt: typeof source.updatedAt === 'string' && source.updatedAt ? source.updatedAt : createdAt,
@@ -408,5 +415,6 @@ module.exports = {
   MAX_NOTE_LENGTH,
   MAX_PATH_LENGTH,
   MAX_CONTENT_LENGTH,
+  MAX_ALLOWLIST_SIZE,
   DATA_FILE,
 };

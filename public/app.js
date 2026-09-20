@@ -212,20 +212,27 @@ function renderScanFileOptions() {
 
 function renderRules() {
   const body = el('rule-body');
-  body.innerHTML = state.rules.map((item) => `<tr>
+  body.innerHTML = state.rules.map((item) => {
+    const allowlist = Array.isArray(item.allowlist) ? item.allowlist : [];
+    const allowCell = allowlist.length > 0
+      ? allowlist.map((entry) => `<span class="chip">${escapeHtml(entry)}</span>`).join('')
+      : '<span class="muted">—</span>';
+    return `<tr>
       <td class="mono">${escapeHtml(item.code)}</td>
       <td>${escapeHtml(item.name)}</td>
       <td><span class="tag ${levelClass(item.level)}">${escapeHtml(item.level)}</span></td>
       <td>${escapeHtml(item.status)}</td>
       <td>${escapeHtml(item.fileType)}</td>
       <td class="mono">${escapeHtml(item.pattern)}</td>
+      <td class="allow-cell">${allowCell}</td>
       <td class="note-cell">${escapeHtml(item.note)}</td>
       <td class="mono">${escapeHtml(formatTime(item.updatedAt))}</td>
       <td class="actions">
         <button type="button" class="link" data-rule-edit="${escapeHtml(item.id)}">编辑</button>
         <button type="button" class="link danger" data-rule-delete="${escapeHtml(item.id)}">删除</button>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
   el('rule-empty').classList.toggle('hidden', state.rules.length > 0);
 }
 
@@ -256,6 +263,7 @@ function openRuleForm(rule) {
   el('rule-file-type').value = rule ? rule.fileType : (state.fileTypes[0] || '全部');
   el('rule-pattern').value = rule ? rule.pattern : '';
   el('rule-note').value = rule ? rule.note : '';
+  el('rule-allowlist').value = rule && Array.isArray(rule.allowlist) ? rule.allowlist.join('\n') : '';
   el('rule-form').classList.remove('hidden');
   el('rule-code').focus();
 }
@@ -298,6 +306,9 @@ async function submitRule(event) {
   event.preventDefault();
   clearNotice();
   clearFieldMarks();
+  // 允许清单按行拆开原样上交，空行也保留，交给服务端当场指出是哪一项；
+  // 整个框空着才表示这条规则没有允许清单
+  const allowText = el('rule-allowlist').value;
   const payload = {
     code: el('rule-code').value,
     name: el('rule-name').value,
@@ -306,6 +317,7 @@ async function submitRule(event) {
     fileType: el('rule-file-type').value,
     pattern: el('rule-pattern').value,
     note: el('rule-note').value,
+    allowlist: allowText.trim() ? allowText.split('\n') : [],
   };
   const editing = state.editingRuleId;
   try {
@@ -368,7 +380,8 @@ async function runScan() {
 }
 
 function renderScan(result) {
-  el('scan-meta').textContent = `扫描时刻 ${formatTime(result.scannedAt)}　参与比对的规则 ${result.rulesUsed} 条（启用共 ${result.enabledRules} 条）　范围里的文件 ${result.filesInScope} 个（清单共 ${result.filesTotal} 个）`;
+  const ignoredTotal = result.summary.ignored ? result.summary.ignored.total : 0;
+  el('scan-meta').textContent = `扫描时刻 ${formatTime(result.scannedAt)}　参与比对的规则 ${result.rulesUsed} 条（启用共 ${result.enabledRules} 条）　范围里的文件 ${result.filesInScope} 个（清单共 ${result.filesTotal} 个）　命中 ${result.summary.total} 条　允许清单排除 ${ignoredTotal} 条`;
 
   const warningBox = el('scan-warning');
   if (result.warning) {
@@ -405,6 +418,35 @@ function renderScan(result) {
       <td class="mono line-cell">${escapeHtml(hit.lineText)}</td>
     </tr>`).join('');
   el('hit-empty').classList.toggle('hidden', result.hits.length > 0);
+
+  renderIgnored(result);
+}
+
+// 忽略项与命中清单分开看：先按规则说清排除了几种写法、每种多少条，再逐条列出明细
+function renderIgnored(result) {
+  const panel = el('ignored-panel');
+  const ignored = Array.isArray(result.ignored) ? result.ignored : [];
+  const summary = (result.summary.ignored && result.summary.ignored.byRule) || [];
+  panel.classList.remove('hidden');
+
+  const ruleText = summary
+    .map((item) => {
+      const patternText = item.patterns.map((p) => `「${p.pattern}」${p.count} 条`).join('、');
+      return `${item.code} 排除了 ${item.patterns.length} 种写法共 ${item.count} 条（${patternText}）`;
+    })
+    .join('；');
+  el('ignored-summary').innerHTML = `<div class="summary-line"><strong>一共排除 ${ignored.length} 条</strong>${ruleText ? `　${escapeHtml(ruleText)}` : ''}</div>`;
+
+  el('ignored-body').innerHTML = ignored.map((item) => `<tr>
+      <td class="mono">${escapeHtml(item.code)}</td>
+      <td><span class="tag ${levelClass(item.level)}">${escapeHtml(item.level)}</span></td>
+      <td>${escapeHtml(item.ruleName)}</td>
+      <td class="mono">${escapeHtml(item.allowPattern)}</td>
+      <td class="mono">${escapeHtml(item.path)}</td>
+      <td class="mono">${item.lineNo}</td>
+      <td class="mono line-cell">${escapeHtml(item.lineText)}</td>
+    </tr>`).join('');
+  el('ignored-empty').classList.toggle('hidden', ignored.length > 0);
 }
 
 // 列表上的操作用事件委托统一处理，列表重绘之后不需要重新绑定

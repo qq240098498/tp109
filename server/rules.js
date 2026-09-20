@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { load, save, LEVELS, STATUSES, FILE_TYPES, MAX_CODE_LENGTH, MAX_RULE_NAME_LENGTH, MAX_PATTERN_LENGTH, MAX_NOTE_LENGTH } = require('./store');
+const { load, save, LEVELS, STATUSES, FILE_TYPES, MAX_CODE_LENGTH, MAX_RULE_NAME_LENGTH, MAX_PATTERN_LENGTH, MAX_NOTE_LENGTH, MAX_ALLOWLIST_SIZE } = require('./store');
 const { ApiError, pickText } = require('./errors');
 
 // 规则编码固定成大写字母加分段的数字，方便在命中清单里引用
@@ -35,6 +35,47 @@ function validatePattern(value) {
     throw new ApiError(400, 'PATTERN_TOO_LONG', `匹配写法不能超过 ${MAX_PATTERN_LENGTH} 个字符`, 'pattern');
   }
   return pattern;
+}
+
+// 允许清单逐条当场校验：空条目、同一段写法登记两次、与匹配写法完全相同，都要指出是哪一条规则的哪一项
+function validateAllowlist(value, pattern, code) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new ApiError(400, 'ALLOWLIST_INVALID', `规则 ${code} 的允许清单要写成一串写法`, 'allowlist');
+  }
+  if (value.length > MAX_ALLOWLIST_SIZE) {
+    throw new ApiError(400, 'ALLOWLIST_TOO_MANY', `规则 ${code} 的允许清单最多登记 ${MAX_ALLOWLIST_SIZE} 条写法`, 'allowlist');
+  }
+  const seen = new Map();
+  return value.map((item, index) => {
+    const where = `规则 ${code} 的允许清单第 ${index + 1} 项`;
+    if (typeof item !== 'string') {
+      throw new ApiError(400, 'ALLOWLIST_INVALID', `${where} 不是文本，允许清单里只能登记写法`, 'allowlist');
+    }
+    if (!item.trim()) {
+      throw new ApiError(400, 'ALLOWLIST_EMPTY_ITEM', `${where} 是空条目，请把它删掉或填上写法`, 'allowlist');
+    }
+    if (item.length > MAX_PATTERN_LENGTH) {
+      throw new ApiError(400, 'ALLOWLIST_ITEM_TOO_LONG', `${where} 不能超过 ${MAX_PATTERN_LENGTH} 个字符`, 'allowlist');
+    }
+    if (item === pattern) {
+      throw new ApiError(400, 'ALLOWLIST_SAME_AS_PATTERN', `${where} 与这条规则的匹配写法完全相同，登记了它这条规则就永远不可能命中`, 'allowlist');
+    }
+    if (seen.has(item)) {
+      throw new ApiError(400, 'ALLOWLIST_DUPLICATED', `${where} 与第 ${seen.get(item) + 1} 项是同一段写法，一段写法只登记一次`, 'allowlist');
+    }
+    seen.set(item, index);
+    return item;
+  });
+}
+
+// 只改匹配写法、没动允许清单时，也要复查已有条目会不会与新写法完全相同
+function checkAllowlistAgainstPattern(allowlist, pattern, code) {
+  allowlist.forEach((item, index) => {
+    if (item === pattern) {
+      throw new ApiError(400, 'ALLOWLIST_SAME_AS_PATTERN', `规则 ${code} 的允许清单第 ${index + 1} 项与要改成的匹配写法完全相同，请先调整允许清单`, 'pattern');
+    }
+  });
 }
 
 function validateLevel(value) {
@@ -120,14 +161,17 @@ function createRule(payload) {
   const input = payload && typeof payload === 'object' ? payload : {};
   const data = load();
   const now = new Date().toISOString();
+  const code = validateCode(input.code, data, '');
+  const pattern = validatePattern(input.pattern);
   const created = {
     id: crypto.randomUUID(),
-    code: validateCode(input.code, data, ''),
+    code,
     name: validateName(input.name),
     level: validateLevel(input.level),
     status: validateStatus(input.status),
     fileType: validateFileType(input.fileType),
-    pattern: validatePattern(input.pattern),
+    pattern,
+    allowlist: validateAllowlist(input.allowlist, pattern, code),
     note: validateNote(input.note),
     createdAt: now,
     updatedAt: now,
@@ -149,6 +193,11 @@ function updateRule(id, payload) {
   found.status = input.status === undefined ? found.status : validateStatus(input.status);
   found.fileType = input.fileType === undefined ? found.fileType : validateFileType(input.fileType);
   found.pattern = input.pattern === undefined ? found.pattern : validatePattern(input.pattern);
+  if (input.allowlist !== undefined) {
+    found.allowlist = validateAllowlist(input.allowlist, found.pattern, found.code);
+  } else if (input.pattern !== undefined) {
+    checkAllowlistAgainstPattern(found.allowlist, found.pattern, found.code);
+  }
   found.note = input.note === undefined ? found.note : validateNote(input.note);
   found.updatedAt = new Date().toISOString();
   save(data);
