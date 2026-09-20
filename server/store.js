@@ -14,6 +14,16 @@ const MAX_PATTERN_LENGTH = 60;
 const MAX_NOTE_LENGTH = 200;
 const MAX_PATH_LENGTH = 120;
 const MAX_CONTENT_LENGTH = 4000;
+const MAX_ALLOW_TEXT_LENGTH = 60;
+
+// 允许写法与忽略项初始都没有，留给页面在使用中登记
+function seedAllows() {
+  return [];
+}
+
+function seedIgnores() {
+  return [];
+}
 
 // 检查规则的初始数据。十二条规则里有两条是停用的，
 // 有一条启用的规则在现有文件里一条命中都没有，用来观察从未命中的规则
@@ -335,7 +345,49 @@ function normalizeFile(item, fallbackIndex) {
   };
 }
 
-// 整份数据保证规则与文件结构一致，缺编号、缺名称、缺路径的条目一律丢掉
+// 把单条允许写法整理成固定结构；写法不能为空、不能跨行、不能超长，编号或写法缺失的一律丢掉
+function normalizeAllow(item, fallbackIndex) {
+  const source = item && typeof item === 'object' ? item : {};
+  const createdAt = typeof source.createdAt === 'string' && source.createdAt ? source.createdAt : new Date().toISOString();
+  return {
+    id: typeof source.id === 'string' && source.id ? source.id : `allow-restored-${fallbackIndex + 1}`,
+    ruleId: typeof source.ruleId === 'string' ? source.ruleId : '',
+    text: typeof source.text === 'string' ? source.text : '',
+    createdAt,
+    updatedAt: typeof source.updatedAt === 'string' && source.updatedAt ? source.updatedAt : createdAt,
+  };
+}
+
+// 把单条忽略记录整理成固定结构；行号必须是不小于 1 的整数，规则、文件或行号不对的一律丢掉
+function normalizeIgnore(item, fallbackIndex) {
+  const source = item && typeof item === 'object' ? item : {};
+  const createdAt = typeof source.createdAt === 'string' && source.createdAt ? source.createdAt : new Date().toISOString();
+  const lineNo = Number.isSafeInteger(source.lineNo) && source.lineNo >= 1 ? source.lineNo : 0;
+  return {
+    id: typeof source.id === 'string' && source.id ? source.id : `ignore-restored-${fallbackIndex + 1}`,
+    ruleId: typeof source.ruleId === 'string' ? source.ruleId : '',
+    fileId: typeof source.fileId === 'string' ? source.fileId : '',
+    lineNo,
+    code: typeof source.code === 'string' ? source.code : '',
+    ruleName: typeof source.ruleName === 'string' ? source.ruleName : '',
+    level: LEVELS.includes(source.level) ? source.level : '',
+    path: typeof source.path === 'string' ? source.path : '',
+    lineText: typeof source.lineText === 'string' ? source.lineText : '',
+    createdAt,
+    updatedAt: typeof source.updatedAt === 'string' && source.updatedAt ? source.updatedAt : createdAt,
+  };
+}
+
+// 一条允许写法是不是站得住：非空、一行、不超长
+function allowTextUsable(text) {
+  return typeof text === 'string'
+    && text.trim().length > 0
+    && text.length <= MAX_ALLOW_TEXT_LENGTH
+    && !text.includes('\n')
+    && !text.includes('\r');
+}
+
+// 整份数据保证规则、文件、允许写法与忽略记录结构一致，缺编号、缺名称、缺路径、悬空引用、重复写法的条目一律丢掉
 function normalize(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
   const seed = { rules: seedRules(), files: seedFiles() };
@@ -368,7 +420,39 @@ function normalize(raw) {
     files.push(file);
   });
 
-  return { rules, files };
+  const ruleById = new Map(rules.map((item) => [item.id, item]));
+  const fileById = new Map(files.map((item) => [item.id, item]));
+
+  // 允许写法按规则各自去重（区分大小写），悬空的、和该规则匹配写法完全相同的也不留
+  const rawAllows = Array.isArray(source.allows) ? source.allows : [];
+  const seenAllows = new Set();
+  const allows = [];
+  rawAllows.forEach((item, index) => {
+    const allow = normalizeAllow(item, index);
+    if (!allow.ruleId || !allowTextUsable(allow.text)) return;
+    const rule = ruleById.get(allow.ruleId);
+    if (!rule || allow.text === rule.pattern) return;
+    const key = `${allow.ruleId} ${allow.text}`;
+    if (seenAllows.has(key)) return;
+    seenAllows.add(key);
+    allows.push(allow);
+  });
+
+  // 忽略记录按规则、文件、行号三元组去重，规则或文件已经不在的记录不留
+  const rawIgnores = Array.isArray(source.ignores) ? source.ignores : [];
+  const seenIgnores = new Set();
+  const ignores = [];
+  rawIgnores.forEach((item, index) => {
+    const ignore = normalizeIgnore(item, index);
+    if (!ignore.ruleId || !ignore.fileId || ignore.lineNo === 0) return;
+    if (!ruleById.has(ignore.ruleId) || !fileById.has(ignore.fileId)) return;
+    const key = `${ignore.ruleId} ${ignore.fileId} ${ignore.lineNo}`;
+    if (seenIgnores.has(key)) return;
+    seenIgnores.add(key);
+    ignores.push(ignore);
+  });
+
+  return { rules, files, allows, ignores };
 }
 
 // 读取数据文件：文件缺失或内容损坏时回落到初始数据并立刻补写
@@ -377,7 +461,7 @@ function load() {
     const raw = fs.readFileSync(DATA_FILE, 'utf8');
     return normalize(JSON.parse(raw));
   } catch (err) {
-    const data = { rules: seedRules(), files: seedFiles() };
+    const data = { rules: seedRules(), files: seedFiles(), allows: seedAllows(), ignores: seedIgnores() };
     save(data);
     return data;
   }
@@ -396,9 +480,13 @@ module.exports = {
   save,
   seedRules,
   seedFiles,
+  seedAllows,
+  seedIgnores,
   normalize,
   normalizeRule,
   normalizeFile,
+  normalizeAllow,
+  normalizeIgnore,
   LEVELS,
   STATUSES,
   FILE_TYPES,
@@ -408,5 +496,6 @@ module.exports = {
   MAX_NOTE_LENGTH,
   MAX_PATH_LENGTH,
   MAX_CONTENT_LENGTH,
+  MAX_ALLOW_TEXT_LENGTH,
   DATA_FILE,
 };

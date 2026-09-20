@@ -100,8 +100,12 @@ function listRules(options) {
   }
 
   const usedFileTypes = Array.from(new Set(data.rules.map((item) => item.fileType)));
+  const allowCountMap = new Map();
+  data.allows.forEach((item) => {
+    allowCountMap.set(item.ruleId, (allowCountMap.get(item.ruleId) || 0) + 1);
+  });
   return {
-    rules: sortRules(list),
+    rules: sortRules(list).map((item) => ({ ...item, allowCount: allowCountMap.get(item.id) || 0 })),
     levels: LEVELS.slice(),
     statuses: STATUSES.slice(),
     fileTypes: FILE_TYPES.slice(),
@@ -113,7 +117,8 @@ function getRule(id) {
   const data = load();
   const found = data.rules.find((item) => item.id === id);
   if (!found) throw new ApiError(404, 'RULE_NOT_FOUND', '这条规则不存在或已被删除', '');
-  return found;
+  const allowCount = data.allows.filter((item) => item.ruleId === found.id).length;
+  return { ...found, allowCount };
 }
 
 function createRule(payload) {
@@ -150,6 +155,10 @@ function updateRule(id, payload) {
   found.fileType = input.fileType === undefined ? found.fileType : validateFileType(input.fileType);
   found.pattern = input.pattern === undefined ? found.pattern : validatePattern(input.pattern);
   found.note = input.note === undefined ? found.note : validateNote(input.note);
+  const clashIndex = data.allows.findIndex((item) => item.ruleId === found.id && item.text === found.pattern);
+  if (clashIndex !== -1) {
+    throw new ApiError(409, 'PATTERN_EQUALS_ALLOW', `匹配写法不能和规则 ${found.code} 允许清单第 ${clashIndex + 1} 项完全相同，否则这条规则会被允许清单整体放行`, 'pattern');
+  }
   found.updatedAt = new Date().toISOString();
   save(data);
   return found;

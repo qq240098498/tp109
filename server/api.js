@@ -1,7 +1,9 @@
-// 对外的动作集合：页面只经过这一层，规则、文件与扫描三块各自管好自己的校验
+// 对外的动作集合：页面只经过这一层，规则、文件、允许清单、忽略项与扫描各自管好自己的校验
 const { ApiError, pickText } = require('./errors');
 const rules = require('./rules');
 const files = require('./files');
+const allows = require('./allows');
+const ignores = require('./ignores');
 const { scan } = require('./scan');
 
 // 查询参数在页面与接口之间来回传的都是文本，这里统一去掉首尾空白并兜住空值
@@ -15,4 +17,6 @@ module.exports = {
   scan,
   ...rules,
   ...files,
+  ...allows,
+  ...ignores,
 };

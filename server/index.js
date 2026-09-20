@@ -54,6 +54,52 @@ app.delete('/api/rules/:id', (req, res) => {
   }
 });
 
+// 一条规则自己的允许清单：列出来、登记一种写法、移除一种写法
+app.get('/api/rules/:ruleId/allows', (req, res) => {
+  try {
+    res.json(api.listAllows(req.params.ruleId));
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+app.post('/api/rules/:ruleId/allows', (req, res) => {
+  try {
+    res.status(201).json(api.createAllow(req.params.ruleId, req.body));
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+app.delete('/api/rules/:ruleId/allows/:id', (req, res) => {
+  try {
+    res.json(api.deleteAllow(req.params.ruleId, req.params.id));
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+// 命中忽略项：把某条具体命中标记忽略，或取消
+app.get('/api/ignores', (_req, res) => {
+  res.json(api.listIgnores());
+});
+
+app.post('/api/ignores', (req, res) => {
+  try {
+    res.status(201).json(api.createIgnore(req.body));
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+app.delete('/api/ignores/:id', (req, res) => {
+  try {
+    res.json(api.deleteIgnore(req.params.id));
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
 app.get('/api/files', (req, res) => {
   res.json(api.listFiles({
     type: api.readQuery(req.query, 'type'),

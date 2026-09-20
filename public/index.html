@@ -47,6 +47,7 @@
               <th>状态</th>
               <th>适用文件类型</th>
               <th>匹配写法</th>
+              <th>允许清单</th>
               <th>说明</th>
               <th>更新时间</th>
               <th>操作</th>
@@ -139,6 +140,11 @@
       <p class="scan-meta" id="scan-meta">还没有扫过，点右上角扫一遍</p>
       <p class="scan-warning hidden" id="scan-warning"></p>
       <div class="summary hidden" id="scan-summary"></div>
+      <div class="seg hidden" id="hit-segments">
+        <button type="button" class="seg-btn on" data-hit-view="active">待处理 <span id="seg-active">0</span></button>
+        <button type="button" class="seg-btn" data-hit-view="excluded">允许排除 <span id="seg-excluded">0</span></button>
+        <button type="button" class="seg-btn" data-hit-view="ignored">已忽略 <span id="seg-ignored">0</span></button>
+      </div>
       <div class="table-wrap">
         <table class="grid">
           <thead>
@@ -149,6 +155,7 @@
               <th>文件</th>
               <th>行号</th>
               <th>那一行的内容</th>
+              <th>状态 / 操作</th>
             </tr>
           </thead>
           <tbody id="hit-body"></tbody>
